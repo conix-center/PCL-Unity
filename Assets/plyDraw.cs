@@ -92,10 +92,10 @@ public class plyDraw : MonoBehaviour {
         gameObject.transform.rotation = rot;
 
         // move PCL in front of camera, demo only
-        float x_cam = 65;
-        float y_cam = 65;
-        float z_cam = -7;
-        meshFilter.transform.position = new Vector3(x_cam, y_cam, z_cam);
+        //float x_cam = 65;
+        //float y_cam = 65;
+        //float z_cam = -7;
+        //meshFilter.transform.position = new Vector3(x_cam, y_cam, z_cam);
     }
 
     // Update is called once per frame
@@ -121,30 +121,44 @@ public class plyDraw : MonoBehaviour {
             mesh.SetColors(pointCloud.colors);
             mesh.SetIndices(Enumerable.Range(0, pointCloud.vertexCount).ToArray(), MeshTopology.Points, 0);
             mesh.UploadMeshData(false);
+
+            // move PCL in front of camera, demo only
+            float x_cam = 65;
+            float y_cam = 65;
+            float z_cam = -7;
+            gameObject.transform.position = new Vector3(x_cam, y_cam, z_cam);
         }
     }
 
     private void OnDisable()
     {
-        socketConnection.Close();
+        socketTread.Abort();
     }
 
     private void socketThreadLoop()
     {
-        // create buffer
-        pclBuffer = new Queue<byte[]> ();
+        try
+        {
+            // create buffer
+            pclBuffer = new Queue<byte[]>();
 
-        // build connection
-        socketConnection = new TcpClient(SERVER_IP, SERVER_PORT);
-        stream = socketConnection.GetStream();
+            // build connection
+            socketConnection = new TcpClient(SERVER_IP, SERVER_PORT);
+            stream = socketConnection.GetStream();
 
-        while (true) {
-            // get new point cloud data
-            byte[] pointData = ListenNewData();
+            while (true)
+            {
+                // get new point cloud data
+                byte[] pointData = ListenNewData();
 
-            lock(bufferLock) {
-                pclBuffer.Enqueue(pointData);
+                lock (bufferLock)
+                {
+                    pclBuffer.Enqueue(pointData);
+                }
             }
+        } finally
+        {
+            socketConnection.Close();
         }
     }
 
@@ -167,7 +181,7 @@ public class plyDraw : MonoBehaviour {
         readByte = 0;
         while (readByte < pointCloud.size)
         {
-            var readSize = stream.Read(pointDataBuffer, readByte, pointDataBuffer.Length - readByte);
+            var readSize = stream.Read(pointDataBuffer, readByte, pointCloud.size - readByte);
             readByte += readSize;
         }
 
