@@ -26,7 +26,7 @@ public class plyDraw : MonoBehaviour {
     private Queue<byte[]> pclBuffer = new Queue<byte[]> ();
 
     // buffer access queue
-    private Object bufferLock = new Object();
+    private object bufferLock = new object();
 
     // camera server control message
     private const String SERVER_CTRL_MSG = "YZ";
@@ -52,6 +52,7 @@ public class plyDraw : MonoBehaviour {
         public List<Vector3> vertices;
         public List<Color32> colors;
         public int vertexCount;
+        public int size;
 
         public PointCloudPackage() {
             vertexCount = 0;
@@ -73,7 +74,8 @@ public class plyDraw : MonoBehaviour {
     void Start()
     {
         // create new thread to build the connection
-        socketTread = new ThreadStart(socketThreadLoop);
+        socketTread = new Thread(new ThreadStart(socketThreadLoop));
+        socketTread.Start();
 
         // create a new MeshFilter
         meshFilter = gameObject.AddComponent<MeshFilter>();
@@ -102,12 +104,12 @@ public class plyDraw : MonoBehaviour {
         byte[] pclData = null;
 
         lock (bufferLock) {
-            if (pclBuffer.count != 0)
+            if (pclBuffer.Count != 0)
                 pclData = pclBuffer.Dequeue();
         }
 
-        if ((pclData != null) && (pclData.length != 0)) {
-            pointCloud.vertexCount = pclData.length / 10;
+        if ((pclData != null) && (pclData.Length != 0)) {
+            pointCloud.vertexCount = pclData.Length / 10;
             pointCloud.InitPointSpace();
             ReadPointData(pclData);
 
@@ -146,7 +148,7 @@ public class plyDraw : MonoBehaviour {
         }
     }
 
-    private void ListenNewData()
+    private byte[] ListenNewData()
     {
         Int32 readByte = 0;
         byte[] pointDataBuffer;
@@ -159,14 +161,17 @@ public class plyDraw : MonoBehaviour {
         while (readByte < sizeof(int))
             readByte += stream.Read(bufferSize, 0, sizeof(int));
 
-        pointDataBuffer = new byte[BitConverter.ToInt32(bufferSize, 0)];
+        pointCloud.size = BitConverter.ToInt32(bufferSize, 0);
+        pointDataBuffer = new byte[pointCloud.size];
 
         readByte = 0;
         while (readByte < pointCloud.size)
         {
-            var readSize = stream.Read(pointCloud.pointDataBuffer, readByte, pointCloud.pointDataBuffer.Length - readByte);
+            var readSize = stream.Read(pointDataBuffer, readByte, pointDataBuffer.Length - readByte);
             readByte += readSize;
         }
+
+        return pointDataBuffer;
     }
 
     private void ReadPointData(byte[] dataBuffer)
