@@ -8,20 +8,31 @@ using UnityEditor;
 using System.Threading;
 using System.Net.Sockets;
 using System.Text;
+using System.Collections;
 
 public class plyDraw : MonoBehaviour {
+
+    // debug control
+    private Boolean DEBUG_FLAG = false;
 
     // tcp connection
     private const string SERVER_IP = "192.168.1.128";
     private const Int32 SERVER_PORT = 8000;
     private TcpClient socketConnection;
-    NetworkStream stream;
+    private Thread socketTread;
+    private NetworkStream stream;
+
+    // camera data buffer
+    private Queue<byte[]> pclBuffer = new Queue<byte[]> ();
+
+    // buffer access queue
+    private Object bufferLock = new Object();
 
     // camera server control message
     private const String SERVER_CTRL_MSG = "YZ";
     private const byte COLORLESS_PCL = 0;
     private const byte COLOR_PCL = 1;
-   
+
     // Unity objects
     private MeshFilter meshFilter;
     private MeshRenderer meshRender;
@@ -30,7 +41,7 @@ public class plyDraw : MonoBehaviour {
     float x_pcl = 0, y_pcl = 0, z_pcl = 0;
 
     // PCL package object
-    private PointCloudPackage pointCloud;
+    private PointCloudPackage pointCloud = new PointCloudPackage();
 
     // Helmet view camera (for demo)
     public Camera cam;
@@ -41,23 +52,18 @@ public class plyDraw : MonoBehaviour {
         public List<Vector3> vertices;
         public List<Color32> colors;
         public int vertexCount;
-        public int size;
-        public byte[] pointDataBuffer;
 
-        public PointCloudPackage()
-        {
+        public PointCloudPackage() {
             vertexCount = 0;
             size = 0;
         }
 
-        public void InitPointSpace()
-        {
+        public void InitPointSpace() {
             vertices = new List<Vector3>(vertexCount);
             colors = new List<Color32>(vertexCount);
         }
 
-        public void AddPoint(float x, float y, float z, byte r, byte g, byte b, byte a)
-        {
+        public void AddPoint(float x, float y, float z, byte r, byte g, byte b, byte a) {
             vertices.Add(new Vector3(x, y, z));
             colors.Add(new Color32(r, g, b, a));
         }
@@ -66,6 +72,9 @@ public class plyDraw : MonoBehaviour {
     // Use this for initialization
     void Start()
     {
+        // create new thread to build the connection
+        socketTread = new ThreadStart(socketThreadLoop);
+
         // create a new MeshFilter
         meshFilter = gameObject.AddComponent<MeshFilter>();
         meshFilter.sharedMesh = new Mesh();
@@ -75,38 +84,32 @@ public class plyDraw : MonoBehaviour {
         // create a new MeshRender
         meshRender = gameObject.AddComponent<MeshRenderer>();
         meshRender.sharedMaterial = AssetDatabase.LoadAssetAtPath<Material>("Assets/Pcx/Editor/Default Point.mat");
-        
+
         // calibrate orientation
         Quaternion rot = Quaternion.Euler(0, 0, 180);
         gameObject.transform.rotation = rot;
 
-        // create point cloud container
-        pointCloud = new PointCloudPackage();
-
-        // build connection
-        socketConnection = new TcpClient(SERVER_IP, SERVER_PORT);
-        stream = socketConnection.GetStream();
+        // move PCL in front of camera, demo only
+        float x_cam = 65;
+        float y_cam = 65;
+        float z_cam = -7;
+        meshFilter.transform.position = new Vector3(x_cam, y_cam, z_cam);
     }
 
     // Update is called once per frame
     void Update()
     {
+        byte[] pclData = null;
 
-        // get data from TCP
-        ListenNewData();
+        lock (bufferLock) {
+            if (pclBuffer.count != 0)
+                pclData = pclBuffer.Dequeue();
+        }
 
-        if (pointCloud.size != 0)
-        {
-            // save data to PointCloudPackage
-            pointCloud.vertexCount = (pointCloud.size / 10);
+        if ((pclData != null) && (pclData.length != 0)) {
+            pointCloud.vertexCount = pclData.length / 10;
             pointCloud.InitPointSpace();
-            ReadPointData();
-
-            // move PCL in front of camera, demo only
-            float x_cam = 65;
-            float y_cam = 65;
-            float z_cam = -7;
-            meshFilter.transform.position = new Vector3(x_cam, y_cam, z_cam);
+            ReadPointData(pclData);
 
             // transfer point cloud data to mesh
             Mesh mesh = meshFilter.sharedMesh;
@@ -124,9 +127,29 @@ public class plyDraw : MonoBehaviour {
         socketConnection.Close();
     }
 
+    private void socketThreadLoop()
+    {
+        // create buffer
+        pclBuffer = new Queue<byte[]> ();
+
+        // build connection
+        socketConnection = new TcpClient(SERVER_IP, SERVER_PORT);
+        stream = socketConnection.GetStream();
+
+        while (true) {
+            // get new point cloud data
+            byte[] pointData = ListenNewData();
+
+            lock(bufferLock) {
+                pclBuffer.Enqueue(pointData);
+            }
+        }
+    }
+
     private void ListenNewData()
     {
         Int32 readByte = 0;
+        byte[] pointDataBuffer;
 
         // request color pointcloud (XYZRGB)
         stream.Write(Encoding.ASCII.GetBytes(SERVER_CTRL_MSG), COLOR_PCL, 1);
@@ -134,12 +157,9 @@ public class plyDraw : MonoBehaviour {
         // get data size & data
         byte[] bufferSize = new byte[sizeof(int)];
         while (readByte < sizeof(int))
-        {
             readByte += stream.Read(bufferSize, 0, sizeof(int));
-        }
-        
-        pointCloud.size = BitConverter.ToInt32(bufferSize, 0);
-        pointCloud.pointDataBuffer = new byte[pointCloud.size];
+
+        pointDataBuffer = new byte[BitConverter.ToInt32(bufferSize, 0)];
 
         readByte = 0;
         while (readByte < pointCloud.size)
@@ -149,7 +169,7 @@ public class plyDraw : MonoBehaviour {
         }
     }
 
-    private void ReadPointData()
+    private void ReadPointData(byte[] dataBuffer)
     {
         const float CONV_RATE = 1000.0f;
         float x = 0, y = 0, z = 0;
@@ -157,10 +177,8 @@ public class plyDraw : MonoBehaviour {
 
         if (pointCloud.vertexCount != 0)
         {
-            byte[] dataBuffer = pointCloud.pointDataBuffer;
             for (var i = 0; i < pointCloud.size; i += 10)
             {
-                
                 x = (dataBuffer[i] | (dataBuffer[i + 1] << 8)) / CONV_RATE;
                 y = (dataBuffer[i + 2] | (dataBuffer[i + 3] << 8)) / CONV_RATE;
                 z = (dataBuffer[i + 4] | (dataBuffer[i + 5] << 8)) / CONV_RATE;
@@ -169,14 +187,22 @@ public class plyDraw : MonoBehaviour {
                 b = dataBuffer[i + 8];
 
                 pointCloud.AddPoint(x, y, z, r, g, b, a);
-                x_pcl += x;
-                y_pcl += y;
-                z_pcl += z;
+
+                if (DEBUG_FLAG) {
+                    x_pcl += x; y_pcl += y; z_pcl += z;
+                }
             }
 
-            x_pcl /= pointCloud.vertexCount;
-            y_pcl /= pointCloud.vertexCount;
-            z_pcl /= pointCloud.vertexCount;
+            if (DEBUG_FLAG) {
+                x_pcl /= pointCloud.vertexCount;
+                y_pcl /= pointCloud.vertexCount;
+                z_pcl /= pointCloud.vertexCount;
+
+                Debug.Log("===== Coordinate Average =====");
+                Debug.Log("X: " + x_pcl);
+                Debug.Log("Y: " + y_pcl);
+                Debug.Log("Z: " + z_pcl);
+            }
         }
     }
 }
