@@ -198,9 +198,9 @@ public class plyDraw : MonoBehaviour {
         {
             for (var i = 0; i < pointCloud.size; i += 10)
             {
-                x = (dataBuffer[i] | (dataBuffer[i + 1] << 8)) / CONV_RATE;
-                y = (dataBuffer[i + 2] | (dataBuffer[i + 3] << 8)) / CONV_RATE;
-                z = (dataBuffer[i + 4] | (dataBuffer[i + 5] << 8)) / CONV_RATE;
+                x = (float)(dataBuffer[i] | (dataBuffer[i + 1] << 8)) / CONV_RATE;
+                y = (float)(dataBuffer[i + 2] | (dataBuffer[i + 3] << 8)) / CONV_RATE;
+                z = (float)(dataBuffer[i + 4] | (dataBuffer[i + 5] << 8)) / CONV_RATE;
                 r = dataBuffer[i + 6];
                 g = dataBuffer[i + 7];
                 b = dataBuffer[i + 8];
