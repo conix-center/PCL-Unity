@@ -16,8 +16,8 @@ public class plyDraw : MonoBehaviour {
     private Boolean DEBUG_FLAG = false;
 
     // tcp connection
-    private const string SERVER_IP = "192.168.1.128";
-    private const Int32 SERVER_PORT = 8000;
+    public string SERVER_IP = "192.168.1.128";
+    public Int32 SERVER_PORT = 8000;
     private TcpClient socketConnection;
     private Thread socketTread;
     private NetworkStream stream;
@@ -207,12 +207,14 @@ public class plyDraw : MonoBehaviour {
 
                 pointCloud.AddPoint(x, y, z, r, g, b, a);
 
-                if (DEBUG_FLAG) {
+                if (DEBUG_FLAG)
+                {
                     x_pcl += x; y_pcl += y; z_pcl += z;
                 }
             }
 
-            if (DEBUG_FLAG) {
+            if (DEBUG_FLAG)
+            {
                 x_pcl /= pointCloud.vertexCount;
                 y_pcl /= pointCloud.vertexCount;
                 z_pcl /= pointCloud.vertexCount;
