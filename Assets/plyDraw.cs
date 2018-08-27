@@ -13,7 +13,7 @@ using System.Collections;
 public class plyDraw : MonoBehaviour {
 
     // debug control
-    private Boolean DEBUG_FLAG = false;
+    private Boolean DEBUG_FLAG = true;
 
     // tcp connection
     public string SERVER_IP = "192.168.1.128";
@@ -88,14 +88,8 @@ public class plyDraw : MonoBehaviour {
         meshRender.sharedMaterial = AssetDatabase.LoadAssetAtPath<Material>("Assets/Pcx/Editor/Default Point.mat");
 
         // calibrate orientation
-        Quaternion rot = Quaternion.Euler(0, 0, 180);
+        Quaternion rot = Quaternion.Euler(0, 180, 0);
         gameObject.transform.rotation = rot;
-
-        // move PCL in front of camera, demo only
-        //float x_cam = 65;
-        //float y_cam = 65;
-        //float z_cam = -7;
-        //meshFilter.transform.position = new Vector3(x_cam, y_cam, z_cam);
     }
 
     // Update is called once per frame
@@ -123,9 +117,9 @@ public class plyDraw : MonoBehaviour {
             mesh.UploadMeshData(false);
 
             // move PCL in front of camera, demo only
-            float x_cam = 65;
-            float y_cam = 65;
-            float z_cam = -7;
+            float x_cam = 0;
+            float y_cam = 0;
+            float z_cam = -5;
             gameObject.transform.position = new Vector3(x_cam, y_cam, z_cam);
         }
     }
@@ -198,14 +192,17 @@ public class plyDraw : MonoBehaviour {
         {
             for (var i = 0; i < pointCloud.size; i += 10)
             {
-                x = (float)(dataBuffer[i] | (dataBuffer[i + 1] << 8)) / CONV_RATE;
-                y = (float)(dataBuffer[i + 2] | (dataBuffer[i + 3] << 8)) / CONV_RATE;
-                z = (float)(dataBuffer[i + 4] | (dataBuffer[i + 5] << 8)) / CONV_RATE;
+                short x_temp = (short)(dataBuffer[i] | (dataBuffer[i + 1] << 8));
+                x = x_temp / CONV_RATE;
+                short y_temp = (short)(dataBuffer[i + 2] | (dataBuffer[i + 3] << 8));
+                y = y_temp / CONV_RATE;
+                short z_temp = (short)(dataBuffer[i + 4] | (dataBuffer[i + 5] << 8));
+                z = z_temp / CONV_RATE;
                 r = dataBuffer[i + 6];
                 g = dataBuffer[i + 7];
                 b = dataBuffer[i + 8];
 
-                pointCloud.AddPoint(x, y, z, r, g, b, a);
+                pointCloud.AddPoint(x, -y, z, r, g, b, a);
 
                 if (DEBUG_FLAG)
                 {
